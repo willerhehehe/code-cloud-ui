@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Code Cloud UI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="title-group">
+        <div class="logo">☁️</div>
+        <div>
+          <h1>Repository Cloud</h1>
+          <p class="subtitle">Visualize frequent terms as a word or code cloud</p>
+        </div>
+      </div>
+      <div class="controls">
+        <label class="toggle">
+          <input type="radio" name="mode" value="words" checked />
+          <span>Word Cloud</span>
+        </label>
+        <label class="toggle">
+          <input type="radio" name="mode" value="code" />
+          <span>Code Cloud</span>
+        </label>
+        <button id="refresh">Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="summary" id="summary">
+        <div class="stat">
+          <div class="stat-label">Mode</div>
+          <div class="stat-value" id="modeLabel">words</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Terms counted</div>
+          <div class="stat-value" id="termCount">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Files scanned</div>
+          <div class="stat-value" id="fileCount">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Last updated</div>
+          <div class="stat-value" id="updatedAt">–</div>
+        </div>
+      </section>
+
+      <section class="cloud" aria-live="polite">
+        <div id="cloudContainer" class="cloud-container"></div>
+      </section>
+    </main>
+
+    <template id="errorTemplate">
+      <div class="error">
+        <div class="error-title">Unable to load cloud data</div>
+        <div class="error-body">Check that the server is running and try again.</div>
+        <button class="retry">Retry</button>
+      </div>
+    </template>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
