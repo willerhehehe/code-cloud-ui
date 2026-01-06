@@ -1,4 +1,4 @@
-"""Lightweight web UI server to visualize repository word and code clouds.
+"""Lightweight web UI server to visualize repository word, code, and structure clouds.
 
 Run the server with:
 
@@ -14,12 +14,11 @@ from __future__ import annotations
 import argparse
 import http.server
 import json
-import os
 from collections import Counter
 from pathlib import Path
 import re
 import socketserver
-from typing import Iterable, List
+from typing import Iterable, List, Sequence
 from urllib.parse import parse_qs, urlparse
 
 
@@ -33,6 +32,7 @@ DEFAULT_EXCLUDES = {
     ".venv",
     "venv",
 }
+JS_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
 
 
 def should_skip_path(path: Path) -> bool:
@@ -106,9 +106,65 @@ def tokenize(text: str, mode: str) -> Iterable[str]:
             lowered = token.lower()
             if len(lowered) > 2:
                 yield lowered
-        else:  # code mode
+        elif mode == "code":
             for piece in split_identifier(token):
                 yield piece
+        else:  # symbols
+            # Symbols mode is extracted separately; do not use generic tokens here.
+            return
+
+
+def symbol_tokens(text: str) -> Iterable[str]:
+    """Extract class, function/method, and top-level variable names."""
+
+    definitions: List[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith(("#", "//", "/*", "*", "--")):
+            continue
+
+        class_match = re.match(
+            r"^(?:export\s+)?(?:abstract\s+)?(?:public\s+|private\s+|protected\s+)?"
+            r"(?:class|interface|struct|trait)\s+([A-Za-z_][\w]*)",
+            stripped,
+        )
+        if class_match:
+            definitions.append(class_match.group(1))
+            continue
+
+        func_match = re.match(
+            r"^(?:export\s+)?(?:async\s+)?(?:public\s+|private\s+|protected\s+|static\s+)?"
+            r"(?:def|func|fn|function)\s+([A-Za-z_][\w]*)",
+            stripped,
+        )
+        if func_match:
+            definitions.append(func_match.group(1))
+            continue
+
+        # Top-level variable or constant (avoid obvious indent)
+        if not line.startswith((" ", "\t")):
+            var_match = re.match(r"^([A-Za-z_][\w]*)\s*=", stripped)
+            if var_match:
+                definitions.append(var_match.group(1))
+
+    for name in definitions:
+        lowered = name.lower()
+        if len(lowered) > 1:
+            yield lowered
+
+
+def should_skip_file(path: Path, mode: str) -> bool:
+    """Decide if a file should be skipped for the given mode."""
+
+    if should_skip_path(path) or path.name.startswith("."):
+        return True
+    if not path.is_file():
+        return True
+    if mode == "symbols" and path.suffix.lower() in JS_EXTENSIONS:
+        return True
+    return False
 
 
 def collect_frequencies(mode: str) -> List[dict]:
@@ -121,14 +177,9 @@ def collect_frequencies(mode: str) -> List[dict]:
         if path.is_dir():
             if should_skip_path(path):
                 continue
-            # Skip descending into excluded directories by clearing iteration
-            # but rglob cannot be manipulated mid-iteration, so rely on the
-            # should_skip_path guard when evaluating files.
             continue
 
-        if should_skip_path(path) or path.name.startswith("."):
-            continue
-        if not path.is_file():
+        if should_skip_file(path, mode):
             continue
 
         text = read_text(path)
@@ -136,7 +187,10 @@ def collect_frequencies(mode: str) -> List[dict]:
             continue
 
         scanned_files += 1
-        counter.update(tokenize(text, mode))
+        if mode == "symbols":
+            counter.update(symbol_tokens(text))
+        else:
+            counter.update(tokenize(text, mode))
 
     most_common = counter.most_common(120)
     return [
@@ -165,8 +219,10 @@ class CloudRequestHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/cloud":
             query = parse_qs(parsed.query)
-            requested_mode = query.get("type", ["words"])[0]
-            mode = "code" if requested_mode.lower() == "code" else "words"
+            requested_mode = query.get("type", ["words"])[0].lower()
+            if requested_mode not in {"words", "code", "symbols"}:
+                requested_mode = "words"
+            mode = requested_mode
             payload = build_response(mode)
             encoded = json.dumps(payload).encode("utf-8")
             self.send_response(200)
@@ -194,12 +250,14 @@ def serve(host: str, port: int) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Serve a repository word/code cloud UI")
+    parser = argparse.ArgumentParser(
+        description="Serve a repository word/code/structure cloud UI"
+    )
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8000, help="Port to bind (default: 8000)")
     parser.add_argument(
         "--mode",
-        choices=["words", "code"],
+        choices=["words", "code", "symbols"],
         help="Optional: print a single analysis to stdout instead of starting the server.",
     )
     return parser.parse_args()

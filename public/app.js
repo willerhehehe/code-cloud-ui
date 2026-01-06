@@ -6,6 +6,12 @@ const updatedAt = document.getElementById("updatedAt");
 const refreshButton = document.getElementById("refresh");
 const errorTemplate = document.getElementById("errorTemplate");
 
+const MODE_LABELS = {
+  words: "words",
+  code: "code",
+  symbols: "structure (classes/functions/globals, JS skipped)",
+};
+
 function renderCloud(items) {
   cloudContainer.innerHTML = "";
   if (!items.length) {
@@ -31,7 +37,7 @@ function renderCloud(items) {
 }
 
 function renderStats({ mode, items, total_terms }) {
-  modeLabel.textContent = mode;
+  modeLabel.textContent = MODE_LABELS[mode] ?? mode;
   termCount.textContent = total_terms;
   fileCount.textContent = items[0]?.files ?? 0;
   const now = new Date();
